@@ -139,10 +139,7 @@ class AccountPool:
 
             if account.access_token:
                 self._accounts.append(account)
-                    logger.info(f"Loaded account {slot}: {email} (5h: {account.five_hour_pct}%, 7d: {account.seven_day_pct}%)")
-
-            except Exception as e:
-                logger.error(f"Failed to load credentials for slot {slot}: {e}")
+                logger.info(f"Loaded account {slot}: {email} (5h: {account.five_hour_pct}%, 7d: {account.seven_day_pct}%)")
 
         if self._accounts:
             self._accounts.sort(key=lambda a: a.headroom_score)

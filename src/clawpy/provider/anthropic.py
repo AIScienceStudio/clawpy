@@ -76,7 +76,7 @@ class AnthropicProvider:
         self._auth_token: str = ""  # OAuth access token (Claude subscription)
         self._account_pool = None  # Multi-account pool (claude-swap integration)
         self._base_url = (cfg.base_url or _DEFAULT_BASE_URL).rstrip("/")
-        self._client = httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=10.0))
+        self._client = httpx.AsyncClient(timeout=httpx.Timeout(7200.0, connect=10.0))
 
         # If no API key, try account pool first, then single OAuth
         if not self._api_key:
