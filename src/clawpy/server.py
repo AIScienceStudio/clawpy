@@ -215,6 +215,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# OpenAI-compatible /v1/chat/completions + /v1/models — for Hermes / LangGraph /
+# any client that speaks the OpenAI dialect. See server_openai.py for design.
+from clawpy.server_openai import router as _openai_router  # noqa: E402
+app.include_router(_openai_router)
+
+
+@app.on_event("startup")
+async def _init_openai_shared_provider() -> None:
+    """Cache one provider instance for the OpenAI-compat router to reuse across
+    requests. Avoids reinstantiating (and re-loading OAuth tokens) per turn."""
+    try:
+        cfg = _get_server_config()
+        prov = _create_provider(cfg)
+        app.state.config = cfg
+        app.state.openai_provider = prov
+        logger.info("OpenAI-compat router ready (provider=%s model=%s)", prov.name, cfg.model)
+    except Exception as e:
+        logger.warning("OpenAI-compat router startup: %s (will lazy-init per request)", e)
+
 
 @app.post("/orchestrator/stream")
 async def chat_stream(req: ChatRequest):
