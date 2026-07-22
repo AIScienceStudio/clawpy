@@ -57,6 +57,7 @@ def _build_tools(engine: Engine) -> ToolRegistry:
     from clawpy.tool.glob_tool import GlobTool
     from clawpy.tool.list_files import ListFilesTool
     from clawpy.tool.web_fetch import WebFetchTool
+    from clawpy.tool.skill_tool import SkillTool
 
     fs = engine.file_state if engine else FileStateTracker()
 
@@ -66,6 +67,22 @@ def _build_tools(engine: Engine) -> ToolRegistry:
     registry.register(GlobTool())
     registry.register(ListFilesTool())
     registry.register(WebFetchTool())
+
+    # Skills tool — discovers and loads SKILL.md files
+    skill_tool = SkillTool()
+    try:
+        from clawpy.skills.loader import SkillRegistry
+        skill_registry = SkillRegistry()
+        config = Config.load()
+        extra_dirs = []
+        skill_registry.discover(config.work_dir, extra_dirs=extra_dirs)
+        skill_tool.set_registry(skill_registry)
+        if skill_registry.list_all():
+            logger.info("Skills loaded: %s", ", ".join(skill_registry.names()))
+    except Exception as e:
+        logger.warning("Skills discovery failed: %s", e)
+    registry.register(skill_tool)
+
     return registry
 
 
@@ -431,6 +448,54 @@ async def _execute_query(req: QueryRequest, models_to_try: list):
                 break
 
     return {"success": False, "error": last_error or "All models failed", "content": ""}
+
+
+@app.get("/orchestrator/skills")
+async def list_skills():
+    """List all loaded skills."""
+    try:
+        from clawpy.skills.loader import SkillRegistry
+        config = Config.load()
+        registry = SkillRegistry()
+        extra_dirs = []
+        registry.discover(config.work_dir, extra_dirs=extra_dirs)
+        return {
+            "success": True,
+            "count": len(registry.list_all()),
+            "skills": [
+                {
+                    "name": s.name,
+                    "description": s.description,
+                    "user_invocable": s.user_invocable,
+                    "source_dir": s.source_dir,
+                    "priority": s.source_priority,
+                    "model": s.model or None,
+                    "homepage": s.homepage or None,
+                }
+                for s in sorted(registry.list_all(), key=lambda x: x.name)
+            ],
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e), "skills": []}
+
+
+@app.post("/orchestrator/skill/{skill_name}")
+async def invoke_skill(skill_name: str, body: dict = None):
+    """Invoke a skill directly via API (bypasses the agentic loop)."""
+    try:
+        from clawpy.skills.loader import SkillRegistry
+        config = Config.load()
+        registry = SkillRegistry()
+        extra_dirs = []
+        registry.discover(config.work_dir, extra_dirs=extra_dirs)
+
+        args = (body or {}).get("args", "")
+        result = registry.invoke(skill_name, args)
+        if result is None:
+            return {"success": False, "error": f"Skill '{skill_name}' not found", "available": registry.names()}
+        return {"success": True, "skill": skill_name, "content": result}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
 @app.get("/orchestrator/health")
